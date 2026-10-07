@@ -1,6 +1,9 @@
 package com.instakill.feed.application;
 
+import com.instakill.feed.domain.FeedRankingStrategy;
 import com.instakill.feed.domain.FeedSort;
+import com.instakill.feed.domain.NewestFeedRankingStrategy;
+import com.instakill.feed.domain.TrendingFeedRankingStrategy;
 import com.instakill.post.domain.Post;
 import com.instakill.post.domain.PostRepository;
 import org.junit.jupiter.api.Test;
@@ -17,7 +20,9 @@ import static org.mockito.Mockito.when;
 class FeedServiceTest {
 
     private final PostRepository repository = Mockito.mock(PostRepository.class);
-    private final FeedService service = new FeedService(repository);
+    private final FeedRankingStrategy newestStrategy = new NewestFeedRankingStrategy();
+    private final FeedRankingStrategy trendingStrategy = new TrendingFeedRankingStrategy();
+    private final FeedService service = new FeedService(repository, List.of(newestStrategy, trendingStrategy));
 
     @Test
     void sortsTrendingFeedByLikesThenCommentsThenRecency() {
@@ -39,7 +44,7 @@ class FeedServiceTest {
                         tuple(5L, 1L)
                 );
     }
-    
+
     @Test
     void returnsNewestFeedInCorrectOrder() {
         List<Post> posts = List.of(
@@ -53,7 +58,7 @@ class FeedServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result).isEqualTo(posts);
     }
-    
+
     @Test
     void defaultsToNewWhenSortIsNull() {
         List<Post> posts = List.of(post(Instant.now(), 1, 1));
@@ -63,6 +68,40 @@ class FeedServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result).isEqualTo(posts);
+    }
+
+    @Test
+    void newestStrategyFetchesLatestPosts() {
+        List<Post> posts = List.of(
+                post(Instant.now().minusSeconds(10), 1, 1),
+                post(Instant.now().minusSeconds(20), 2, 2)
+        );
+        when(repository.findLatest(1, 2)).thenReturn(posts);
+
+        List<Post> result = newestStrategy.fetch(repository, 1, 2);
+
+        assertThat(result).isEqualTo(posts);
+    }
+
+    @Test
+    void trendingStrategySortsByLikesThenCommentsThenRecency() {
+        Instant now = Instant.now();
+        List<Post> posts = List.of(
+                post(now.minusSeconds(60), 2, 5),
+                post(now.minusSeconds(30), 5, 1),
+                post(now.minusSeconds(10), 5, 3)
+        );
+        when(repository.findLatest(0, 10)).thenReturn(posts);
+
+        List<Post> result = trendingStrategy.fetch(repository, 0, 2);
+
+        assertThat(result)
+                .hasSize(2)
+                .extracting(Post::likeCount, Post::commentCount)
+                .containsExactly(
+                        tuple(5L, 3L),
+                        tuple(5L, 1L)
+                );
     }
 
     private Post post(Instant createdAt, long likes, long comments) {
