@@ -13,6 +13,13 @@ spring:
       max-request-size: 200MB
 media:
   base-path: media
+image-processing:
+  max-width: 300
+  watermark-text: Instakill Demo
+notification:
+  enabled: true
+  base-url: https://ntfy.sh
+  topic: instakill-demo-posts
 server:
   servlet:
     context-path: /
