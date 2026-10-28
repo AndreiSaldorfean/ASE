@@ -14,6 +14,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +68,32 @@ class MediaUploadIntegrationTest {
         mockMvc.perform(get(mediaUrl))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(bytes));
+    }
+
+    @Test
+    void uploadedImageIsScaledDownBeforeSaving() throws Exception {
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(800, 400, BufferedImage.TYPE_INT_RGB), "png", png);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", png.toByteArray());
+
+        MvcResult result = mockMvc.perform(multipart("/api/media").file(file).cookie(token))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String mediaUrl = objectMapper.readTree(result.getResponse().getContentAsString()).get("mediaUrl").asText();
+        byte[] stored = mockMvc.perform(get(mediaUrl))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(stored));
+        assertThat(image.getWidth()).isEqualTo(300);
+        assertThat(image.getHeight()).isEqualTo(150);
+    }
+
+    @Test
+    void rejectsInvalidImageContent() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "fake.png", "image/png", "not-an-image".getBytes());
+        mockMvc.perform(multipart("/api/media").file(file).cookie(token))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
